@@ -1,11 +1,9 @@
 // server.cjs
-// Clean, production-ready CommonJS version of your server file
-// (keeps the exact same logic and behavior you provided)
+// Production-ready CommonJS server with dynamic CORS (allows localhost + Netlify)
 
 require("dotenv").config();
 
 const express = require("express");
-const cors = require("cors");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
 
@@ -40,14 +38,45 @@ const OfferInquirySchema = new mongoose.Schema({
 const Inquiry = mongoose.model("Inquiry", InquirySchema);
 const OfferInquiry = mongoose.model("OfferInquiry", OfferInquirySchema);
 
-// Middleware
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST"],
-    credentials: true,
-  })
-);
+/*
+  Dynamic CORS middleware:
+  - Whitelists allowed origins (local dev + Netlify front-end)
+  - Mirrors origin in Access-Control-Allow-Origin for credentialed requests
+  - Handles preflight (OPTIONS) requests properly
+*/
+const allowedOrigins = [
+  "http://localhost:5173",                     // local dev
+  "https://krishnacomputerkict.netlify.app"    // production frontend
+];
+
+app.use((req, res, next) => {
+  const origin = req.get("origin");
+
+  if (!origin) {
+    // no origin (server-to-server or curl) — allow (you can change to deny if needed)
+    res.header("Access-Control-Allow-Origin", "*");
+  } else if (allowedOrigins.includes(origin)) {
+    // mirror the origin to allow credentials and correct origin header
+    res.header("Access-Control-Allow-Origin", origin);
+    res.header("Vary", "Origin");
+  } else {
+    // origin not allowed — do not set Access-Control-Allow-Origin
+    // Browser will block the request on the client side.
+  }
+
+  // Standard CORS headers for preflight and actual requests
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  // If preflight request, return 204 No Content
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
 app.use(bodyParser.json());
 
 // Routes
